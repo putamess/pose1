@@ -4,7 +4,10 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright';
 
-const browser = await chromium.launch({ args: ['--no-sandbox', '--use-angle=swiftshader'] });
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM_BIN || undefined,
+  args: ['--no-sandbox', '--use-angle=swiftshader'],
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));

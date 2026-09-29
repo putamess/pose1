@@ -10,13 +10,15 @@
 // Everything is driven through the rig object created in rig.js.
 
 import * as THREE from 'three';
-import { CHAINS, HINGES, JOINT_LIMITS, clamp, deg2rad, rad2deg } from './joints.js';
+import { CHAINS, chainOf, HINGES, JOINT_LIMITS, clamp, deg2rad, rad2deg } from './joints.js';
 import { worstPointCollision, segmentCollision, resolvePointOut } from './collision.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
 
 const _a = new THREE.Vector3();
@@ -43,13 +45,23 @@ function setWorldQuaternion(obj, qWorld) {
 // Clamp a joint to its anatomical limits.
 //   • hinge joints (elbows/knees): physical bend angle around the hinge axis
 //   • everything else: euler XYZ component limits
-export function clampJointRotation(obj) {
+//
+// JOINT_LIMITS are authored as DELTAS FROM REST, not as absolute local euler
+// angles — that is what the sliders mean, and it is the only reading that
+// survives a foreign rig. Mixamo-style armatures bind their joints with big
+// non-identity rotations (a Z-up root, a 180°-flipped thigh, a 60° foot), so
+// clamping the absolute euler would snap a resting leg 135° sideways the
+// first time IK touched it. Pass the rig's captured rest quaternion.
+const _restQ = new THREE.Quaternion(); // identity (mannequin-style rigs)
+
+export function clampJointRotation(obj, restQ = _restQ) {
   const hinge = HINGES[obj.name];
-  if (hinge) return hingeClamp(obj, hinge);
+  if (hinge) return hingeClamp(obj, hinge, restQ);
 
   const lim = JOINT_LIMITS[obj.name];
   if (!lim) return false;
-  const e = new THREE.Euler().setFromQuaternion(obj.quaternion, 'XYZ');
+  _q1.copy(restQ).invert().multiply(obj.quaternion);
+  const e = new THREE.Euler().setFromQuaternion(_q1, 'XYZ');
   const dx = rad2deg(e.x), dy = rad2deg(e.y), dz = rad2deg(e.z);
   const cx = clamp(dx, lim.x[0], lim.x[1]);
   const cy = clamp(dy, lim.y[0], lim.y[1]);
@@ -57,7 +69,7 @@ export function clampJointRotation(obj) {
   const changed = cx !== dx || cy !== dy || cz !== dz;
   if (changed) {
     e.set(deg2rad(cx), deg2rad(cy), deg2rad(cz), 'XYZ');
-    obj.quaternion.setFromEuler(e);
+    obj.quaternion.copy(restQ).multiply(_q1.setFromEuler(e));
     obj.updateMatrixWorld(true);
   }
   return changed;
@@ -66,7 +78,9 @@ export function clampJointRotation(obj) {
 // Signed bend angle (degrees) of a hinge joint, measured between the parent
 // bone direction (rest) and the child bone direction, in the parent's local
 // frame, around the hinge axis. Used by the clamp and by tests.
-export function hingeBendDegrees(obj) {
+// Bend angle measured FROM REST (see hingeClamp for why). Mannequin-style
+// rigs bind straight, so the identity default reproduces the old reading.
+export function hingeBendDegrees(obj, restQ = _restQ) {
   const h = HINGES[obj.name];
   if (!h) return 0;
   const parent = obj.parent;
@@ -82,10 +96,23 @@ export function hingeBendDegrees(obj) {
   const ref = obj.position.clone().normalize();
   const axis = _v3.set(h.axis[0], h.axis[1], h.axis[2]).normalize();
   const theta = Math.atan2(axis.dot(_v4.crossVectors(ref, dirL)), ref.dot(dirL));
-  return rad2deg(theta);
+  return rad2deg(theta) - rad2deg(restBend(ref, child, axis, restQ));
 }
 
-function hingeClamp(obj, h) {
+// Bend the joint sits at when the rig is at rest. Both angles that define it
+// live in the parent's frame, and the child's rest direction only depends on
+// the rest quaternion — dirL_rest = restQ · normalize(child.position) — so no
+// world matrices are needed to evaluate it.
+function restBend(ref, child, axis, restQ) {
+  const restDir = _v5.copy(child.position).normalize().applyQuaternion(restQ);
+  return Math.atan2(axis.dot(_v6.crossVectors(ref, restDir)), ref.dot(restDir));
+}
+
+// [min, max] bound how far the joint may bend FROM ITS REST BEND, not the
+// absolute angle. Mixamo-style rigs bind their knees and elbows a few degrees
+// already bent; reading the absolute angle would snap them straight (and, for
+// a rig binding at 180°, tear the limb around) the first time IK clamped.
+function hingeClamp(obj, h, restQ = _restQ) {
   const parent = obj.parent;
   const child = obj.getObjectByName(h.child);
   if (!child || !parent) return false;
@@ -101,7 +128,7 @@ function hingeClamp(obj, h) {
   const ref = obj.position.clone().normalize();
   const axis = _v3.set(h.axis[0], h.axis[1], h.axis[2]).normalize();
   const theta = Math.atan2(axis.dot(_v4.crossVectors(ref, dirL)), ref.dot(dirL));
-  const tDeg = rad2deg(theta);
+  const tDeg = rad2deg(theta) - rad2deg(restBend(ref, child, axis, restQ));
   const c = clamp(tDeg, h.min, h.max);
   if (Math.abs(c - tDeg) < 1e-6) return false;
 
@@ -170,7 +197,7 @@ export function applyTwoBone(root, mid, end, l1, l2, target, poleVec) {
 }
 
 export function solveChain(rig, chainKey, targetWorld, opts = {}) {
-  const ch = CHAINS[chainKey];
+  const ch = chainOf(rig, chainKey);
   const A = rig.joints[ch.root];
   const B = rig.joints[ch.mid];
   const C = rig.joints[ch.end];
@@ -179,8 +206,14 @@ export function solveChain(rig, chainKey, targetWorld, opts = {}) {
   const root = rig.root;
   root.updateMatrixWorld(true);
 
-  const l1 = B.position.length();
-  const l2 = C.position.length();
+  // Bone lengths must be measured in WORLD metres: B.position is the offset
+  // from B's parent in the rig's own units, which are centimetres whenever the
+  // armature carries a 0.01 scale (every centimetre-authored rig). Feeding
+  // those into the law of cosines gives a limb tens of metres long.
+  const l1 = A.getWorldPosition(new THREE.Vector3())
+    .distanceTo(B.getWorldPosition(new THREE.Vector3()));
+  const l2 = B.getWorldPosition(new THREE.Vector3())
+    .distanceTo(C.getWorldPosition(new THREE.Vector3()));
   const poleWorld = new THREE.Vector3(...ch.pole);
   const colliders = rig.chainColliders[chainKey] || rig.colliders;
   const target = _t.copy(targetWorld);
@@ -215,9 +248,9 @@ export function solveChain(rig, chainKey, targetWorld, opts = {}) {
     if (ch.minY !== undefined) target.y = Math.max(target.y, ch.minY);
   }
 
-  // 5. anatomical limits
-  clampJointRotation(A);
-  clampJointRotation(B);
+  // 5. anatomical limits (relative to this rig's rest pose)
+  clampJointRotation(A, rig.rest[ch.root]);
+  clampJointRotation(B, rig.rest[ch.mid]);
   root.updateMatrixWorld(true);
 
   const reached = C.getWorldPosition(new THREE.Vector3());
@@ -239,7 +272,7 @@ export function checkJointCollision(rig, jointName) {
   rig.root.updateMatrixWorld(true);
   let worst = null;
   for (const key of chainNames) {
-    const ch = CHAINS[key];
+    const ch = chainOf(rig, key);
     const colliders = rig.chainColliders[key] || rig.colliders;
     const A = rig.joints[ch.root];
     const B = rig.joints[ch.mid];

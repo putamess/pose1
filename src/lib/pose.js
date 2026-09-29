@@ -111,8 +111,9 @@ export function clampPose(pose) {
 
 export function applyPoseToRig(rig, pose) {
   const p = clampPose(pose);
-  const hips = rig.joints.Hips;
-  hips.position.set(p.hipsPos[0], p.hipsPos[1], p.hipsPos[2]);
+  // Goes through the rig so the canonical metres are converted into the
+  // loaded rig's own joint space (see createRig's hips note).
+  rig.setHipsPos(p.hipsPos[0], p.hipsPos[1], p.hipsPos[2]);
   for (const name of JOINT_ORDER) {
     const r = p.rot[name];
     const obj = rig.joints[name];
@@ -148,12 +149,14 @@ export function capturePoseFromRig(rig) {
       Math.round((rad2deg(_e.z)) * 10) / 10,
     ];
   }
-  const h = rig.joints.Hips.position;
+  // Canonical metres, not the joint's local position — same conversion the
+  // sliders and presets speak, so a pose saved on one rig replays on another.
+  const h = rig.getHipsPos();
   return {
     hipsPos: [
-      Math.round(h.x * 1000) / 1000,
-      Math.round(h.y * 1000) / 1000,
-      Math.round(h.z * 1000) / 1000,
+      Math.round(h[0] * 1000) / 1000,
+      Math.round(h[1] * 1000) / 1000,
+      Math.round(h[2] * 1000) / 1000,
     ],
     rot,
   };

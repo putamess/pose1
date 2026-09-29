@@ -235,9 +235,14 @@ export async function attachMannequinRig(scene, template) {
   });
   for (const mesh of toConvert) {
     mesh.updateMatrixWorld(true);
-    skinGeometry(mesh.geometry, segs, mesh.matrixWorld);
+    // Per-instance geometry: imported glTFs often share one geometry between
+    // several nodes (mirrored limbs, repeated props), and skin attributes are
+    // computed per instance world transform — sharing would let the last
+    // instance overwrite everyone's weights.
+    const geom = mesh.geometry.clone();
+    skinGeometry(geom, segs, mesh.matrixWorld);
 
-    const sk = new THREE.SkinnedMesh(mesh.geometry, mesh.material);
+    const sk = new THREE.SkinnedMesh(geom, mesh.material);
     sk.name = mesh.name;
     sk.castShadow = mesh.castShadow;
     sk.receiveShadow = mesh.receiveShadow;
