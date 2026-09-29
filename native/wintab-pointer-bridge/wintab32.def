@@ -1,0 +1,52 @@
+LIBRARY "wintab32"
+EXPORTS
+    WTInfoA @20
+    WTInfoW @1020
+    WTInfo=WTInfoA
+    WTOpenA @21
+    WTOpenW @1021
+    WTOpen=WTOpenA
+    WTClose @22
+    WTPacketsGet @23
+    WTPacket @24
+    WTEnable @40
+    WTOverlap @41
+    WTConfig @60
+    WTGetA @61
+    WTGetW @1061
+    WTGet=WTGetA
+    WTSetA @62
+    WTSetW @1062
+    WTSet=WTSetA
+    WTExtGet @63
+    WTExtSet @64
+    WTSave @65
+    WTRestore @66
+    WTPacketsPeek @80
+    WTDataGet @81
+    WTDataPeek @82
+    WTQueueSizeGet @84
+    WTQueueSizeSet @85
+    WTMgrOpen @100
+    WTMgrClose @101
+    WTMgrContextEnum @120
+    WTMgrContextOwner @121
+    WTMgrDefContext @122
+    WTMgrDefContextEx @206
+    WTMgrDeviceConfig @140
+    WTMgrExt @180
+    WTMgrCsrEnable @181
+    WTMgrCsrButtonMap @182
+    WTMgrCsrPressureBtnMarks @183
+    WTMgrCsrPressureResponse @184
+    WTMgrCsrExt @185
+    WTQueuePacketsEx @200
+    WTMgrCsrPressureBtnMarksEx @201
+    WTMgrConfigReplaceExA @202
+    WTMgrConfigReplaceExW @1202
+    WTMgrConfigReplaceEx=WTMgrConfigReplaceExA
+    WTMgrPacketHookExA @203
+    WTMgrPacketHookExW @1203
+    WTMgrPacketHookEx=WTMgrPacketHookExA
+    WTMgrPacketUnhook @204
+    WTMgrPacketHookNext @205

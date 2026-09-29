@@ -1,0 +1,7 @@
+/out/
+/build/
+*.dll
+*.obj
+*.pdb
+*.lib
+*.exp
