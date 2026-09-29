@@ -5,7 +5,10 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright';
 
-const browser = await chromium.launch({ args: ['--no-sandbox', '--use-angle=swiftshader'] });
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM_BIN || undefined,
+  args: ['--no-sandbox', '--use-angle=swiftshader'],
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
@@ -73,7 +76,7 @@ R.charList2 = await page.evaluate(
   () => document.querySelectorAll('[data-testid=char-list] li').length === 2,
 );
 R.activeIsSoldier = await page.evaluate(() => {
-  const on = document.querySelector('[data-testid=char-list] li.on .link');
+  const on = document.querySelector('[data-testid=char-list] li.on');
   return !!on && on.textContent.includes('soldier_user.glb');
 });
 R.rigReady = await page.evaluate(
@@ -145,15 +148,16 @@ if (hand2 && hand2.x > 0 && hand2.x < 1440) {
     && Math.hypot(...after.map((v, i) => v - before[i])) > 0.1;
 } else fail('ikOnUploaded');
 
-// ---- 4. activate the default character via the list ----
+// ---- 4. activate the default character via the list (pose button) ----
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('[data-testid=char-list] .link')]
+  const li = [...document.querySelectorAll('[data-testid=char-list] li')]
     .find((x) => x.textContent.includes('기본 마니퀸'));
+  const b = li && [...li.querySelectorAll('button')].find((x) => x.textContent === '포즈');
   b && b.click();
 });
 await page.waitForTimeout(300);
 R.activeSwitched = await page.evaluate(() => {
-  const on = document.querySelector('[data-testid=char-list] li.on .link');
+  const on = document.querySelector('[data-testid=char-list] li.on');
   return !!on && on.textContent.includes('기본 마니퀸');
 });
 
@@ -254,7 +258,7 @@ R.charDeleted = await page.evaluate(() => {
   const n = document.querySelectorAll('[data-testid=char-list] li').length;
   let roots = 0;
   window.__SCENE__.children.forEach((c) => { if (c.userData && c.userData.charId) roots++; });
-  const on = document.querySelector('[data-testid=char-list] li.on .link');
+  const on = document.querySelector('[data-testid=char-list] li.on');
   return n === 1 && roots === 1 && !!on && on.textContent.includes('기본 마니퀸');
 });
 

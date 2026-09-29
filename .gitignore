@@ -1,0 +1,9 @@
+node_modules/
+dist/
+
+# test screenshots (written by scripts/test_*, smoke_ui, e2e_ui)
+/e2e_*.png
+/smoke_*.png
+/usermodel_*.png
+/import_*.png
+/pose_*.png

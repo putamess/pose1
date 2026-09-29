@@ -86,12 +86,35 @@ src/
 ## 테스트
 
 ```bash
-node scripts/test_solver.mjs     # IK·한도·충돌·프리셋 솔버 테스트 (257 checks)
-node scripts/smoke_ui.mjs        # 선택/슬라이더/저장/PNG UI 스모크
-node scripts/e2e_ui.mjs          # 기즈모 회전 + IK 드래그 E2E
-node scripts/test_import.mjs     # 메인 모델 교체 + 소품 배치 E2E
-node scripts/test_user_model.mjs # 리깅 없는 모델 디스플레이 전용 로드
+npm test               # 노드 테스트 전부 (솔버·개명·자동 리깅·바닥 정렬)
+npm run test:ui        # 브라우저 E2E 전부 (아래 개발 서버 실행 필요)
+
+npm run test:solver     # IK·한도·충돌·프리셋 솔버 테스트 (257 checks)
+npm run test:naming     # 외국 뼈 이름 매핑 단위 테스트
+npm run test:autorig    # 자동 리깅(스키닝·가중치·디폼) 단위 테스트
+npm run test:grounding  # 바닥 정렬 테스트
+npm run test:smoke      # 선택/슬라이더/저장/PNG UI 스모크
+npm run test:e2e        # 기즈모 회전 + IK 드래그 E2E
+npm run test:import     # 다중 캐릭터·소품 배치 E2E
+npm run test:user-model # 리깅 없는 모델 자동 리깅 E2E
 ```
+
+브라우저 테스트(`test:*` 중 UI 계열)는 `localhost:5173`에서 `npm run dev`가
+실행 중이어야 합니다. Playwright에 내려받은 브라우저 대신 시스템 Chromium을
+쓰려면 `CHROMIUM_BIN=/path/to/chromium` 환경 변수를 지정하세요.
+
+### 테스트 픽스처
+
+`test:autorig` / `test:import` / `test:user-model`은 `public/`에 커밋된 GLB
+픽스처 2개를 사용합니다. `mannequin.gltf`(단일 소스)로부터 다시 생성:
+
+```bash
+npm run gen:fixtures
+```
+
+- `public/mannequin_user.glb` — 뼈 없는 모델 (자동 리깅·소품 테스트)
+- `public/soldier_user.glb` — Mixamo 관절 이름 + A-포즈 리그 모델
+  (개명 파이프라인·다중 캐릭터 테스트)
 
 ## 디버그 훅
 

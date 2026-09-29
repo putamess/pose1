@@ -8,7 +8,17 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "gen:model": "python3 scripts/gen_gltf.py",
-    "test:solver": "node scripts/test_solver.mjs"
+    "gen:fixtures": "node scripts/gen_fixtures.mjs",
+    "test": "npm run test:solver && npm run test:naming && npm run test:autorig && npm run test:grounding",
+    "test:ui": "npm run test:smoke && npm run test:e2e && npm run test:import && npm run test:user-model",
+    "test:solver": "node scripts/test_solver.mjs",
+    "test:naming": "node scripts/test_naming.mjs",
+    "test:autorig": "node scripts/test_autorig.mjs",
+    "test:grounding": "node scripts/test_grounding.mjs",
+    "test:smoke": "node scripts/smoke_ui.mjs",
+    "test:e2e": "node scripts/e2e_ui.mjs",
+    "test:import": "node scripts/test_import.mjs",
+    "test:user-model": "node scripts/test_user_model.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",

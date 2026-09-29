@@ -2,6 +2,9 @@ import { chromium } from 'playwright';
 
 // End-to-end interaction test: FK gizmo, IK drag, view modes, screenshots.
 const browser = await chromium.launch({
+  // CHROMIUM_BIN: optional path to a system/extracted Chromium when the
+  // Playwright browser download is unavailable (restricted networks).
+  executablePath: process.env.CHROMIUM_BIN || undefined,
   args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-angle=swiftshader'],
 });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
