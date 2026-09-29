@@ -4,10 +4,10 @@
 
 import * as THREE from 'three';
 import {
-  CHAINS, CHAIN_BY_END, CHAINS_BY_JOINT, JOINT_LIMITS, JOINT_ORDER,
-  HIPS_POS_LIMITS, clamp, rad2deg, isHinge,
+  CHAINS, chainOf, CHAIN_BY_END, CHAINS_BY_JOINT, JOINT_LIMITS, JOINT_ORDER,
+  HIPS_POS_LIMITS, REST_HIPS_POS, clamp, rad2deg, isHinge,
 } from './joints.js';
-import { buildColliders, resolvePointOut, worstPointCollision } from './collision.js';
+import { buildColliders, fitScale, resolvePointOut, worstPointCollision } from './collision.js';
 import { solveChain, clampJointRotation, checkJointCollision } from './ik.js';
 import { applyPoseToRig, capturePoseFromRig } from './pose.js';
 import { applyJointNameMap } from './naming.js';
@@ -33,6 +33,23 @@ export function createRig(root) {
   const rest = {};
   for (const name of JOINT_ORDER) rest[name] = joints[name].quaternion.clone();
 
+  // Hips translation is authored in the app's canonical frame: metres, Y-up,
+  // with REST_HIPS_POS as the nominal standing hips height. A foreign rig
+  // keeps its joints in centimetres / Z-up / under a scaled armature, so that
+  // value must NEVER be written straight into the joint's local position —
+  // doing so drops the hips by ~1 m and buries the character in the floor.
+  // We solve for the target world point instead and convert back.
+  //
+  // The rest capture is stored in the rig ROOT's frame, so dragging the
+  // character around (which moves the root) never fights the pose.
+  const hipsParent = joints.Hips.parent;
+  const restHipsInRoot = root.worldToLocal(joints.Hips.getWorldPosition(new THREE.Vector3()));
+  const _hipsW = new THREE.Vector3();
+  const _hipsR = new THREE.Vector3();
+  const _hipsD = new THREE.Vector3();
+  const _restHipsPos = new THREE.Vector3(...REST_HIPS_POS);
+  const restHipsWorld = (out) => root.localToWorld(out.copy(restHipsInRoot));
+
   // Nearest joint to a world point (raycast fallback for skinned meshes).
   const _wp = new THREE.Vector3();
   function nearestJointName(point) {
@@ -48,11 +65,25 @@ export function createRig(root) {
     return bestD < 0.36 ? best : null; // >0.6 m away from every joint: none
   }
 
+  // Re-fit the collision model to this character's proportions (see fitScale).
+  const fit = fitScale(root);
+  const chains = {};
+  for (const [key, ch] of Object.entries(CHAINS)) {
+    chains[key] = {
+      ...ch,
+      skinRoot: ch.skinRoot * fit,
+      skinMid: ch.skinMid * fit,
+      skinEff: ch.skinEff * fit,
+    };
+  }
+
   const rig = {
     root,
     joints,
     rest,
-    colliders: buildColliders(root),
+    fit,
+    chains,
+    colliders: buildColliders(root, fit),
     chainsByJoint: CHAINS_BY_JOINT,
 
     // Per-chain collider subsets (a leg never collides with its own thigh).
@@ -94,7 +125,7 @@ export function createRig(root) {
           'XYZ',
         )));
       root.updateMatrixWorld(true);
-      clampJointRotation(obj);
+      clampJointRotation(obj, rest[name]);
       root.updateMatrixWorld(true);
       if (checkCollision) {
         const pen = checkJointCollision(rig, name);
@@ -109,7 +140,7 @@ export function createRig(root) {
 
     // Live clamp during a gizmo drag (limits only — no revert mid-drag).
     liveClamp(name) {
-      const changed = clampJointRotation(joints[name]);
+      const changed = clampJointRotation(joints[name], rest[name]);
       if (changed) root.updateMatrixWorld(true);
       return changed;
     },
@@ -128,17 +159,21 @@ export function createRig(root) {
     },
 
     // ---- hips translation -------------------------------------------------
+    // Both directions convert between the canonical frame (metres, Y-up,
+    // REST_HIPS_POS = standing) and the rig's own joint space.
     getHipsPos() {
-      const p = joints.Hips.position;
-      return [p.x, p.y, p.z];
+      joints.Hips.getWorldPosition(_hipsW);
+      _hipsD.subVectors(_hipsW, restHipsWorld(_hipsR)).add(_restHipsPos);
+      return [_hipsD.x, _hipsD.y, _hipsD.z];
     },
     setHipsPos(x, y, z) {
-      const p = joints.Hips.position;
-      p.set(
+      _hipsD.set(
         clamp(x, HIPS_POS_LIMITS.x[0], HIPS_POS_LIMITS.x[1]),
         clamp(y, HIPS_POS_LIMITS.y[0], HIPS_POS_LIMITS.y[1]),
         clamp(z, HIPS_POS_LIMITS.z[0], HIPS_POS_LIMITS.z[1]),
-      );
+      ).sub(_restHipsPos);                       // canonical delta, metres
+      restHipsWorld(_hipsR).add(_hipsD);         // target world position
+      joints.Hips.position.copy(hipsParent.worldToLocal(_hipsR));
       root.updateMatrixWorld(true);
     },
 
@@ -196,7 +231,7 @@ export function createRig(root) {
 
     // Is the hand/foot allowed at this world point? (used for cursor hints)
     effectorBlocked(chainKey, worldPoint) {
-      const ch = CHAINS[chainKey];
+      const ch = chainOf(rig, chainKey);
       return !!worstPointCollision(
         rig.chainColliders[chainKey] || rig.colliders,
         worldPoint,
@@ -204,7 +239,7 @@ export function createRig(root) {
       );
     },
     resolveEffector(chainKey, worldPoint) {
-      const ch = CHAINS[chainKey];
+      const ch = chainOf(rig, chainKey);
       return resolvePointOut(rig.chainColliders[chainKey] || rig.colliders, worldPoint, ch.skinEff);
     },
   };

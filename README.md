@@ -86,17 +86,19 @@ src/
 ## 테스트
 
 ```bash
-npm test               # 노드 테스트 전부 (솔버·개명·자동 리깅·바닥 정렬)
+npm test               # 노드 테스트 전부 (솔버·개명·자동 리깅·바닥 정렬·외국 리그)
 npm run test:ui        # 브라우저 E2E 전부 (아래 개발 서버 실행 필요)
 
-npm run test:solver     # IK·한도·충돌·프리셋 솔버 테스트 (257 checks)
-npm run test:naming     # 외국 뼈 이름 매핑 단위 테스트
-npm run test:autorig    # 자동 리깅(스키닝·가중치·디폼) 단위 테스트
-npm run test:grounding  # 바닥 정렬 테스트
-npm run test:smoke      # 선택/슬라이더/저장/PNG UI 스모크
-npm run test:e2e        # 기즈모 회전 + IK 드래그 E2E
-npm run test:import     # 다중 캐릭터·소품 배치 E2E
-npm run test:user-model # 리깅 없는 모델 자동 리깅 E2E
+npm run test:solver        # IK·한도·충돌·프리셋 솔버 테스트 (257 checks)
+npm run test:naming        # 외국 뼈 이름 매핑 단위 테스트
+npm run test:autorig       # 자동 리깅(스키닝·가중치·디폼) 단위 테스트
+npm run test:grounding     # 바닥 정렬 테스트
+npm run test:foreign-rig   # 실제 Mixamo 리그(female.glb) 회귀 테스트
+npm run test:smoke         # 선택/슬라이더/저장/PNG UI 스모크
+npm run test:e2e           # 기즈모 회전 + IK 드래그 E2E
+npm run test:import        # 다중 캐릭터·소품 배치 E2E
+npm run test:user-model    # 리깅 없는 모델 자동 리깅 E2E
+npm run test:foreign-model # 외국 리그 모델 포즈/바닥 정렬 E2E
 ```
 
 브라우저 테스트(`test:*` 중 UI 계열)는 `localhost:5173`에서 `npm run dev`가
@@ -115,6 +117,24 @@ npm run gen:fixtures
 - `public/mannequin_user.glb` — 뼈 없는 모델 (자동 리깅·소품 테스트)
 - `public/soldier_user.glb` — Mixamo 관절 이름 + A-포즈 리그 모델
   (개명 파이프라인·다중 캐릭터 테스트)
+
+## 외국 리그(Mixamo 등) 지원
+
+번들 마니퀸은 *관절 로컬 공간 = 미터, Y-up, rest 회전 항등*이라는 조건을
+만족합니다. 실제 업로드되는 모델은 대부분 그렇지 않기 때문에, 아래 네 가지를
+리그가 스스로의 좌표계로 환산해서 처리합니다.
+
+| 항목 | 마니퀸 전제 | 외국 리그 현실 | 처리 |
+|---|---|---|---|
+| 엉덩이 위치 | 로컬 = 미터 | cm, Z-up, 스케일 0.01 | 월드 지점으로 환산 + rest 기준 델타 |
+| 충돌체 크기 | 노드 로컬 = 미터 | cm → 1mm로 붕괴 | 노드 월드 스케일로 환산 |
+| 뼈 길이 (IK) | 로컬 = 미터 | 100배 과대 평가 | 월드 거리로 측정 |
+| 관절 한계 | 절대 local euler | rest가 −90°/180° 등 | rest 대비 델타로 클램프 |
+
+추가로 **충돌 모델은 캐릭터 비율에 맞춰 재조정**됩니다. 충돌체는 마니퀸
+비율(힙 간격 0.18 m)에 맞춘 고정 미터 크기인데, 힙이 더 좁은 캐릭터는 기본
+자세에서 이미 자기 충돌체와 겹쳐 모든 포즈가 거부됩니다. 힙 간격 실측값으로
+충돌체·팔다리 두께를 보정해(`fitScale`) 상대 여유를 동일하게 유지합니다.
 
 ## 디버그 훅
 

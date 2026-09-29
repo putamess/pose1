@@ -132,3 +132,10 @@ export function clampDeg(name, euler) {
           clamp(euler[1], lim.y[0], lim.y[1]),
           clamp(euler[2], lim.z[0], lim.z[1])];
 }
+
+// Per-rig chain lookup. createRig() stores a copy of CHAINS whose skin radii
+// (limb thickness) are re-fitted to the loaded character's proportions; callers
+// that only have the authored constants (tests, one-offs) still work.
+export function chainOf(rig, key) {
+  return (rig && rig.chains && rig.chains[key]) || CHAINS[key];
+}
